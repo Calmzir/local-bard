@@ -1,0 +1,14 @@
+{
+  // Renderer runs in the browser context (nodeIntegration: false, sandbox: true),
+  // so no "node" types and no runtime imports from src/shared are allowed here.
+  // It may still `import type { ... } from '../shared/types'` — type-only
+  // imports are erased at compile time, so nothing gets emitted for shared/
+  // and there is no output collision with tsconfig.main.json / tsconfig.preload.json.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ES2020",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": ["src/renderer/**/*.ts"]
+}

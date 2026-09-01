@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';"
+    />
+    <title>Local Bard</title>
+    <link rel="stylesheet" href="./index.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Local Bard</h1>
+        <p class="subtitle">Stream one app's audio into a Discord voice channel.</p>
+      </header>
+
+      <section id="token-section" class="card" hidden>
+        <h2>Bot setup</h2>
+        <p>Paste your Discord bot token once. It is encrypted with your OS keychain and never leaves this device in plaintext.</p>
+        <div class="row">
+          <input id="token-input" type="password" placeholder="Bot token" autocomplete="off" />
+          <button id="token-save-btn" type="button">Save token</button>
+        </div>
+        <p id="token-status" class="hint" role="status"></p>
+      </section>
+
+      <section id="oauth-client-section" class="card" hidden>
+        <h2>Discord login setup</h2>
+        <p>
+          Paste your Discord application's Client ID and Client Secret once (OAuth2 tab in the
+          Developer Portal, same app the bot token comes from). Encrypted with your OS keychain,
+          same as the bot token, in a separate file. This login is read-only (identify + guild
+          list only) -- see SECURITY.md.
+        </p>
+        <div class="row">
+          <input id="oauth-client-id-input" type="text" placeholder="Client ID" autocomplete="off" />
+        </div>
+        <div class="row">
+          <input
+            id="oauth-client-secret-input"
+            type="password"
+            placeholder="Client Secret"
+            autocomplete="off"
+          />
+          <button id="oauth-client-save-btn" type="button">Save credentials</button>
+        </div>
+        <p id="oauth-client-status" class="hint" role="status"></p>
+      </section>
+
+      <section class="card">
+        <div class="row space-between">
+          <h2>Discord login</h2>
+          <div class="row">
+            <button id="oauth-login-btn" type="button">Sign in with Discord</button>
+            <button id="oauth-logout-btn" type="button" hidden>Log out</button>
+          </div>
+        </div>
+        <p id="oauth-login-status" class="hint" role="status">Not signed in.</p>
+        <p id="oauth-login-error" class="error" hidden></p>
+        <ul id="guild-list" class="guild-list" hidden></ul>
+        <p id="guild-list-empty" class="hint" hidden>
+          No servers found where you have Manage Server permission and the bot is also a member.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>Bot connection</h2>
+        <dl class="status-grid">
+          <dt>Bot connected</dt>
+          <dd id="bot-connected">-</dd>
+          <dt>Bot username</dt>
+          <dd id="bot-username">-</dd>
+          <dt>Guild</dt>
+          <dd id="status-guild">not connected</dd>
+          <dt>Voice channel</dt>
+          <dd id="status-channel">not connected</dd>
+        </dl>
+      </section>
+
+      <section class="card">
+        <div class="row space-between">
+          <h2>Audio sources</h2>
+          <button id="refresh-btn" type="button">Refresh</button>
+        </div>
+        <ul id="app-list" class="app-list" role="listbox" aria-label="Running applications"></ul>
+        <p id="app-list-empty" class="hint">
+          No applications are producing audio right now. On Linux/Windows, an app only shows up here
+          while it is actively playing sound — start playback in the app you want to capture, then
+          click Refresh.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>Streaming</h2>
+        <dl class="status-grid">
+          <dt>State</dt>
+          <dd id="status-state">idle</dd>
+          <dt>Selected app</dt>
+          <dd id="status-app">none</dd>
+        </dl>
+        <p id="status-error" class="error" hidden></p>
+        <div class="row">
+          <button id="start-btn" type="button" disabled>Start streaming</button>
+          <button id="stop-btn" type="button" disabled>Stop</button>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="./index.js"></script>
+  </body>
+</html>

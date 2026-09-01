@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+release/
+
+# Secrets / local config -- never committed. The bot token is never even
+# written to a project-relative file (it lives encrypted in the OS userData
+# dir via safeStorage), but these are excluded defensively anyway.
+.env
+.env.*
+!.env.example
+*.token
+bot-token.enc
+config.json
+
+# Windows helper build artifacts (published binaries are produced locally /
+# in CI right before packaging -- see windows-helper README section).
+windows-helper/bin/
+windows-helper/obj/
+windows-helper/publish/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+npm-debug.log*
+*.log
+
+# Unrelated local tooling cache, pre-existing in this directory.
+.atl/

@@ -1,0 +1,14 @@
+{
+  // Root config kept only so editors and `tsc --showConfig` resolve a project
+  // out of the box. Actual builds always use one of the three split configs
+  // below, because main/preload (Node/CommonJS) and renderer (browser/ESM)
+  // need different module targets and lib sets.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts"]
+}
