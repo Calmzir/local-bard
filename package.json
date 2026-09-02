@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Local desktop app that captures a single application's audio output and streams it into a Discord voice channel via a self-controlled bot.",
   "private": true,
-  "author": "",
+  "author": "Joel Fereira <joelfereira15@gmail.com>",
   "license": "UNLICENSED",
   "main": "dist/main/index.js",
   "scripts": {
@@ -16,8 +16,8 @@
     "build": "npm run clean && npm run build:main && npm run build:preload && npm run build:guide && npm run build:renderer && npm run copy:static",
     "start": "electron .",
     "dev": "npm run build && electron .",
-    "dist:win": "npm run build && electron-builder --win",
-    "dist:linux": "npm run build && electron-builder --linux",
+    "dist:win": "npm run build && electron-builder --win --publish never",
+    "dist:linux": "npm run build && electron-builder --linux --publish never",
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.preload.json --noEmit && tsc -p tsconfig.renderer.json --noEmit"
   },
   "//": "electron-builder config lives in electron-builder.yml (not here) so it can carry real comments -- see the note there about auto-update. Opus encoding uses opusscript (pure JS) only, not @discordjs/opus -- see README's 'Dependency notes' section for why.",
