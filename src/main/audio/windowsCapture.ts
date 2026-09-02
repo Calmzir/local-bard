@@ -18,6 +18,18 @@ const HELPER_EXE_NAME = 'LocalBard.WindowsHelper.exe';
  * The helper is invoked with a fixed executable path and a fixed argv array
  * -- never `shell: true`, never string-concatenated commands.
  *
+ * Unlike Linux/PipeWire (which only creates a `Stream/Output/Audio` node
+ * once a process is actively producing sound), WASAPI's process-loopback
+ * activation targets a process id directly regardless of whether it has
+ * played anything yet, and `SessionEnumerator` lists sessions without
+ * filtering by playback state -- so, in principle, this module needs no
+ * poll-and-wait step: `listApps()` should already surface apps that
+ * haven't made sound yet, and `startCapture()` can start the loopback
+ * stream immediately after selection, naturally yielding silence until the
+ * target starts playing. See the TODO(windows-verify) markers below and in
+ * SessionEnumerator.cs/ProcessLoopbackCapture.cs for what specifically
+ * still needs confirming on real hardware before relying on that.
+ *
  * TODO(windows-verify): this module has NOT been exercised on real Windows
  * hardware. The C# helper's process-loopback activation, its JSON --list
  * output shape, and its raw PCM --capture stream all need to be verified end
@@ -27,6 +39,15 @@ const HELPER_EXE_NAME = 'LocalBard.WindowsHelper.exe';
 export class WindowsAudioCapture implements AudioCaptureSource {
   private captureProcess: ChildProcessByStdio<null, Readable, Readable> | null = null;
 
+  /**
+   * Lists processes with a WASAPI audio session, active or not -- see
+   * SessionEnumerator.cs, which does not filter by AudioSessionState, so an
+   * app that has only initialized its audio client (but not started
+   * playback) should already be included here.
+   * TODO(windows-verify): confirm on real hardware that inactive/silent
+   * sessions actually show up this way and aren't held back by NAudio or
+   * WASAPI until playback starts.
+   */
   async listApps(): Promise<CapturableApp[]> {
     const exe = resolveHelperPath();
     if (!existsSync(exe)) {
@@ -91,6 +112,21 @@ export class WindowsAudioCapture implements AudioCaptureSource {
       }
       output.end();
     });
+
+    // Unlike LinuxAudioCapture (which may need to poll and emit 'waiting'
+    // first -- see its class doc comment), process-loopback activation
+    // targets a PID directly and should naturally yield silence rather than
+    // an error until the target starts making sound, so there is no
+    // separate waiting phase to report: the pipeline is considered live as
+    // soon as the helper process is spawned.
+    // TODO(windows-verify): confirm on real hardware that activating
+    // loopback capture for a process that hasn't produced any audio yet
+    // succeeds immediately (rather than failing or blocking) and streams
+    // silence, not an error, until that process actually renders audio. If
+    // that assumption is wrong, this needs the same poll-and-wait treatment
+    // as LinuxAudioCapture (emit 'waiting', retry activation, emit 'live'
+    // once it succeeds).
+    output.emit('live');
 
     return output;
   }

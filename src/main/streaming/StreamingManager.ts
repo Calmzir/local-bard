@@ -95,6 +95,16 @@ export class StreamingManager extends EventEmitter {
       const pcmStream = this.captureSource.startCapture(appId);
       this.currentCaptureStream = pcmStream;
       pcmStream.on('error', (err: Error) => this.handleCaptureError(err));
+      // The capture source reports its own waiting -> live phase transition
+      // via these events (see AudioCaptureSource.startCapture's doc comment)
+      // rather than us inferring it from data arrival -- e.g. on Linux the
+      // target app may not be producing sound yet when capture starts.
+      pcmStream.on('waiting', () => {
+        this.updateStatus({ state: 'waiting_for_audio', selectedApp: app, errorMessage: null });
+      });
+      pcmStream.on('live', () => {
+        this.updateStatus({ state: 'live', selectedApp: app, errorMessage: null });
+      });
 
       const opusEncoder = new prism.opus.Encoder({
         rate: OPUS_RATE,
@@ -109,7 +119,10 @@ export class StreamingManager extends EventEmitter {
       });
 
       this.audioPlayer.play(resource);
-      this.updateStatus({ state: 'live', selectedApp: app, errorMessage: null });
+      // Whether this is actually live yet or still waiting for the app to
+      // make sound is reported asynchronously via the events above, not
+      // this return value -- it only reflects that the pipeline was wired
+      // up successfully.
       return { ok: true, errorMessage: null };
     } catch (err) {
       const errorMessage = (err as Error).message;

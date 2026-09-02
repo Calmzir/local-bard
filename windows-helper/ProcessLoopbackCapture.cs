@@ -40,6 +40,16 @@ namespace LocalBard.WindowsHelper;
 ///   5. Capture latency and buffer sizing (currently a fixed 20ms poll loop)
 ///      is acceptable for real-time Discord streaming, and does not need an
 ///      event-driven (AUDCLNT_STREAMFLAGS_EVENTCALLBACK) redesign.
+///   6. Activation for a target process that has not produced any audio yet
+///      (no WASAPI session initialized at all) succeeds immediately and
+///      simply yields silence via GetNextPacketSize()==0 until that process
+///      starts rendering audio, rather than failing outright or blocking
+///      indefinitely. Local Bard's Node-side wrapper assumes this is true
+///      and calls this activation right after the user picks an app --
+///      before it has necessarily made any sound -- with no separate
+///      wait-and-retry step (see windowsCapture.ts). If activation actually
+///      requires an existing/active session, this needs the same
+///      poll-and-wait treatment LinuxAudioCapture uses.
 /// </summary>
 internal static class ProcessLoopbackCapture
 {

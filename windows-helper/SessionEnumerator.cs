@@ -44,13 +44,22 @@ public static class SessionEnumerator
             {
                 using var session = sessions[i];
 
+                // Deliberately NOT filtering on session.State here: Local
+                // Bard wants to list an app the moment it has initialized an
+                // audio client, even if it hasn't started playback yet
+                // (State == AudioSessionStateInactive), not just apps
+                // already producing sound (State == AudioSessionStateActive).
+                //
                 // TODO(windows-verify): confirm on real hardware that
                 // AudioSessionControl.GetProcessID reliably returns the
                 // owning process id for every session state (Active,
-                // Inactive, Expired), and that sessions belonging to the
-                // system sounds / audio service host process (pid 0 or the
-                // "audiodg.exe" mixer) are filtered out sensibly here rather
-                // than showing up as a confusing phantom entry.
+                // Inactive, Expired), that Inactive ("initialized but
+                // silent") sessions are actually enumerated here rather than
+                // only appearing once playback starts, and that sessions
+                // belonging to the system sounds / audio service host
+                // process (pid 0 or the "audiodg.exe" mixer) are filtered
+                // out sensibly here rather than showing up as a confusing
+                // phantom entry.
                 int pid;
                 try
                 {
