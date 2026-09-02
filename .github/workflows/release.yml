@@ -1,0 +1,96 @@
+name: Release
+
+# Triggered by pushing a version tag, e.g.:
+#   npm version 0.1.0 && git push --follow-tags
+# See RELEASING.md for the full maintainer release process.
+on:
+  push:
+    tags:
+      - "v*"
+
+# No broader token scope than what the release job actually needs to create
+# a GitHub Release. Build jobs get the default read-only token.
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - run: npm ci
+
+      # Publishes the self-contained Windows helper that electron-builder's
+      # extraResources config (electron-builder.yml) bundles into the app.
+      - name: Publish windows-helper
+        working-directory: windows-helper
+        run: dotnet publish -r win-x64 --self-contained -o publish/win-x64
+
+      - name: Build Windows installer
+        run: npm run dist:win
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: release/*.exe
+          if-no-files-found: error
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build Linux packages
+        run: npm run dist:linux
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-installers
+          path: |
+            release/*.AppImage
+            release/*.deb
+          if-no-files-found: error
+
+  release:
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # Downloads every build job's artifact, each into its own
+      # subdirectory under ./artifacts (actions/upload-artifact@v4 default
+      # layout: one directory per artifact name).
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            artifacts/windows-installer/*.exe \
+            artifacts/linux-installers/*.AppImage \
+            artifacts/linux-installers/*.deb \
+            --title "Local Bard ${{ github.ref_name }}" \
+            --generate-notes
