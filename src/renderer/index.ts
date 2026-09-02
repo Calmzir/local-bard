@@ -1,4 +1,10 @@
 import type { CapturableApp, GuildConfigStatus, StreamingStatus, VoiceChannelInfo } from '../shared/types';
+// Renderer modules are loaded by Chromium's native ES module loader (no
+// bundler -- see index.html's `<script type="module">`), which requires
+// the full file extension on a relative specifier; `moduleResolution:
+// "Node"` (tsconfig.base.json) still resolves this `.js` specifier against
+// the sibling `.ts` source file at compile time.
+import { GUIDE_HTML } from './guideContent.generated.js';
 
 // Temporary diagnostics: uncaught exceptions and unhandled promise
 // rejections don't reach the main process' `console-message` listener on
@@ -38,10 +44,17 @@ let voiceChannels: VoiceChannelInfo[] = [];
 let lastUsedChannelId: string | null = localStorage.getItem(STORAGE_KEYS.selectedChannelId);
 
 const els = {
-  tokenSection: document.getElementById('token-section') as HTMLElement,
+  botSetupSteps: document.getElementById('bot-setup-steps') as HTMLElement,
   tokenInput: document.getElementById('token-input') as HTMLInputElement,
   tokenSaveBtn: document.getElementById('token-save-btn') as HTMLButtonElement,
   tokenStatus: document.getElementById('token-status') as HTMLElement,
+  tokenError: document.getElementById('token-error') as HTMLElement,
+  botConnectedView: document.getElementById('bot-connected-view') as HTMLElement,
+  botUsernameDisplay: document.getElementById('bot-username-display') as HTMLElement,
+  inviteLink: document.getElementById('invite-link') as HTMLAnchorElement,
+  copyInviteBtn: document.getElementById('copy-invite-btn') as HTMLButtonElement,
+  inviteStatus: document.getElementById('invite-status') as HTMLElement,
+  changeTokenBtn: document.getElementById('change-token-btn') as HTMLButtonElement,
   botConnected: document.getElementById('bot-connected') as HTMLElement,
   botUsername: document.getElementById('bot-username') as HTMLElement,
   statusGuild: document.getElementById('status-guild') as HTMLElement,
@@ -65,6 +78,12 @@ const els = {
   guildStatusText: document.getElementById('guild-status-text') as HTMLElement,
   guildError: document.getElementById('guild-error') as HTMLElement,
   guildChannelList: document.getElementById('guild-channel-list') as HTMLUListElement,
+
+  helpBtn: document.getElementById('help-btn') as HTMLButtonElement,
+  helpModalOverlay: document.getElementById('help-modal-overlay') as HTMLElement,
+  helpModal: document.getElementById('help-modal') as HTMLElement,
+  helpModalCloseBtn: document.getElementById('help-modal-close-btn') as HTMLButtonElement,
+  helpModalContent: document.getElementById('help-modal-content') as HTMLElement,
 };
 
 /** Sets `text` on `el` with a CSS fade-out animation, restarting the
@@ -200,33 +219,104 @@ async function refreshApps(): Promise<void> {
   }
 }
 
+/** Clears the inline token-error paragraph (step 2 of the wizard). */
+function clearTokenError(): void {
+  els.tokenError.hidden = true;
+  els.tokenError.textContent = '';
+}
+
+function showTokenError(message: string): void {
+  els.tokenStatus.textContent = '';
+  els.tokenError.hidden = false;
+  els.tokenError.textContent = message;
+}
+
 async function refreshBotSetupStatus(): Promise<void> {
   const setup = await bard.getBotSetupStatus();
-  els.tokenSection.hidden = setup.hasToken;
   els.botConnected.textContent = setup.connected ? 'yes' : 'no';
   els.botConnected.classList.toggle('value-ok', setup.connected);
   els.botConnected.classList.toggle('value-muted', !setup.connected);
   els.botUsername.textContent = setup.botUsername ?? '-';
+
+  // Steps 1-2 (create bot, paste token) show whenever the bot isn't
+  // connected -- including right after a failed save, so a bad token
+  // never leaves the user stuck with no way to retry (see "Change token"
+  // for the deliberate-swap case, and this for the failure case). Step 3
+  // (connected view) shows only once actually connected.
+  els.botSetupSteps.hidden = setup.connected;
+  els.botConnectedView.hidden = !setup.connected;
+
+  if (setup.connected) {
+    clearTokenError();
+    els.botUsernameDisplay.textContent = setup.botUsername ?? '-';
+    if (setup.inviteUrl) {
+      els.inviteLink.href = setup.inviteUrl;
+      els.inviteLink.classList.remove('disabled-link');
+    } else {
+      els.inviteLink.href = '#';
+      els.inviteLink.classList.add('disabled-link');
+    }
+    els.copyInviteBtn.disabled = !setup.inviteUrl;
+  } else if (setup.connectError) {
+    // Explains an otherwise-silent "not connected" state -- e.g. a stored
+    // token that was revoked while the app was closed.
+    showTokenError(setup.connectError);
+  }
 }
 
 async function handleSaveToken(): Promise<void> {
   const token = els.tokenInput.value;
   els.tokenSaveBtn.disabled = true;
   els.tokenStatus.classList.remove('flash-success');
-  els.tokenStatus.textContent = 'Saving...';
+  els.tokenStatus.textContent = 'Connecting to Discord...';
+  clearTokenError();
   try {
     const result = await bard.saveBotToken(token);
     if (result.ok) {
       els.tokenInput.value = '';
-      flashSuccess(els.tokenStatus, 'Token saved. Connecting...');
-      // Give the success message a moment to be seen before this section
-      // hides itself (it only shows while no token is stored yet).
-      setTimeout(() => void refreshBotSetupStatus(), 900);
+      flashSuccess(els.tokenStatus, 'Connected.');
+      await refreshBotSetupStatus();
     } else {
-      els.tokenStatus.textContent = result.errorMessage ?? 'Failed to save token.';
+      showTokenError(result.errorMessage ?? 'Failed to save token.');
     }
+  } catch (err) {
+    // Defensive: an actual unhandled IPC-layer rejection should never
+    // reach here now that SAVE_BOT_TOKEN always resolves with ok/errorMessage,
+    // but this is the fix for the bug where a rejected promise used to be
+    // silently swallowed (no catch block) and left "Saving..." on screen forever.
+    showTokenError(`Failed to save token: ${(err as Error).message}`);
   } finally {
     els.tokenSaveBtn.disabled = false;
+  }
+}
+
+async function handleCopyInvite(): Promise<void> {
+  els.copyInviteBtn.disabled = true;
+  els.inviteStatus.classList.remove('flash-success');
+  try {
+    const result = await bard.copyInviteLink();
+    if (result.ok) {
+      flashSuccess(els.inviteStatus, 'Invite link copied.');
+    } else {
+      els.inviteStatus.textContent = result.errorMessage ?? 'Failed to copy invite link.';
+    }
+  } catch (err) {
+    els.inviteStatus.textContent = `Failed to copy invite link: ${(err as Error).message}`;
+  } finally {
+    els.copyInviteBtn.disabled = false;
+  }
+}
+
+async function handleChangeToken(): Promise<void> {
+  els.changeTokenBtn.disabled = true;
+  try {
+    await bard.clearBotToken();
+    els.tokenStatus.classList.remove('flash-success');
+    els.tokenStatus.textContent = '';
+    clearTokenError();
+    await refreshBotSetupStatus();
+  } finally {
+    els.changeTokenBtn.disabled = false;
   }
 }
 
@@ -287,15 +377,36 @@ function renderGuildChannelList(channels: VoiceChannelInfo[]): void {
 
     const name = document.createElement('span');
     name.className = 'app-name';
-    name.textContent = channel.name;
+    // Prefix with the parent category name when there is one -- two
+    // channels (even across different servers) can easily share the exact
+    // same generic name (e.g. "Canal de Voz"), and the category is the
+    // distinguishing context the user actually recognizes.
+    name.textContent = channel.categoryName ? `${channel.categoryName} - ${channel.name}` : channel.name;
     li.appendChild(name);
+
+    // Secondary/trailing group: the channel's raw id (always shown, in
+    // monospace, muted -- same primary-name + secondary-muted-text pattern
+    // as the running-app picker's app-name/app-process) covers the rarer
+    // case of two identically-named channels in the very same category,
+    // where the category prefix alone can't disambiguate. Grouped with the
+    // "Last used" tag so the row keeps exactly two flex children for
+    // `space-between` (name on the left, this group on the right).
+    const meta = document.createElement('span');
+    meta.className = 'app-list-meta';
+
+    const id = document.createElement('span');
+    id.className = 'app-process channel-id';
+    id.textContent = channel.id;
+    meta.appendChild(id);
 
     if (channel.id === lastUsedChannelId) {
       const tag = document.createElement('span');
       tag.className = 'last-used-tag';
       tag.textContent = 'Last used';
-      li.appendChild(tag);
+      meta.appendChild(tag);
     }
+
+    li.appendChild(meta);
 
     li.addEventListener('click', () => void handleJoinGuildChannel(channel.id, li));
     els.guildChannelList.appendChild(li);
@@ -354,6 +465,32 @@ async function handleSaveGuildId(): Promise<void> {
   }
 }
 
+/** Element that had focus right before the help modal opened, so it can be
+ * restored on close (same "don't strand keyboard focus" care as the rest of
+ * this app's keyboard-accessibility effort). */
+let helpModalOpener: HTMLElement | null = null;
+
+function onHelpModalKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeHelpModal();
+  }
+}
+
+function openHelpModal(): void {
+  helpModalOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  els.helpModalOverlay.hidden = false;
+  els.helpModal.focus();
+  document.addEventListener('keydown', onHelpModalKeydown);
+}
+
+function closeHelpModal(): void {
+  els.helpModalOverlay.hidden = true;
+  document.removeEventListener('keydown', onHelpModalKeydown);
+  helpModalOpener?.focus();
+  helpModalOpener = null;
+}
+
 function onEnterKey(input: HTMLInputElement, action: () => void): void {
   input.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
@@ -367,6 +504,8 @@ function wireEvents(): void {
   els.refreshBtn.addEventListener('click', () => void refreshApps());
   els.appFilterInput.addEventListener('input', () => renderAppList());
   els.tokenSaveBtn.addEventListener('click', () => void handleSaveToken());
+  els.copyInviteBtn.addEventListener('click', () => void handleCopyInvite());
+  els.changeTokenBtn.addEventListener('click', () => void handleChangeToken());
   els.startBtn.addEventListener('click', () => void handleStart());
   els.stopBtn.addEventListener('click', () => void handleStop());
   bard.onStatusChanged(renderStreamingStatus);
@@ -377,6 +516,14 @@ function wireEvents(): void {
   onEnterKey(els.tokenInput, () => void handleSaveToken());
   onEnterKey(els.guildIdInput, () => void handleSaveGuildId());
 
+  els.helpBtn.addEventListener('click', () => openHelpModal());
+  els.helpModalCloseBtn.addEventListener('click', () => closeHelpModal());
+  // Backdrop click: only close when the click actually landed on the
+  // overlay itself, not on the panel or anything inside it.
+  els.helpModalOverlay.addEventListener('click', (event) => {
+    if (event.target === els.helpModalOverlay) closeHelpModal();
+  });
+
   // Keep the running-app list fresh without a manual click every time. The
   // manual Refresh button still works on top of this for an explicit
   // immediate check; `refreshApps()` already preserves `selectedAppId`
@@ -386,6 +533,14 @@ function wireEvents(): void {
 
 async function init(): Promise<void> {
   wireEvents();
+
+  // Safe to assign via innerHTML here specifically: GUIDE_HTML comes from
+  // guideContent.generated.ts, produced at build time (scripts/build-guide.js)
+  // from this project's own GETTING-STARTED.md -- developer-authored and
+  // trusted, never fetched at runtime or influenced by user/network input.
+  // This is NOT a general-purpose pattern for untrusted content.
+  els.helpModalContent.innerHTML = GUIDE_HTML;
+
   await refreshBotSetupStatus();
   const status = await bard.getStatus();
   renderStreamingStatus(status);

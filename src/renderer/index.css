@@ -54,6 +54,18 @@ header {
   margin-bottom: var(--space-6);
 }
 
+/* The title/subtitle block needs its own baseline within the header's
+   row/space-between layout -- override the utility's `align-items:
+   baseline` (fine for two text-ish siblings, awkward between a two-line
+   text block and a button) to top-align both sides instead. */
+header.row.space-between {
+  align-items: flex-start;
+}
+
+#help-btn {
+  flex-shrink: 0;
+}
+
 header h1 {
   margin: 0 0 var(--space-1);
   font-size: 1.375rem;
@@ -89,6 +101,51 @@ header h1 {
   color: var(--muted);
   font-size: 0.85rem;
   line-height: 1.55;
+}
+
+/* ---- Guided wizard steps (bot setup card) ---- */
+
+.wizard-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.wizard-step + .wizard-step {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.wizard-step h3 {
+  margin: 0 0 var(--space-2);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.wizard-step > p {
+  margin: 0 0 var(--space-3);
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+#bot-connected-view > p {
+  margin: 0 0 var(--space-3);
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+#bot-connected-view .row {
+  margin-bottom: var(--space-2);
+}
+
+#change-token-btn {
+  margin-top: var(--space-2);
 }
 
 /* ---- Layout helpers ---- */
@@ -169,11 +226,49 @@ button.secondary:disabled {
   border-color: var(--border);
 }
 
+/* A link that needs to look and behave like the primary button (external
+   links opened via the app's existing shell.openExternal guard -- see
+   `setWindowOpenHandler` in src/main/index.ts -- rather than an
+   ipcRenderer call), so it shares the exact same visual language. */
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  padding: var(--space-2) var(--space-4);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    transform 100ms ease;
+}
+
+.button-link:hover {
+  background: var(--accent-hover);
+}
+
+.button-link:active {
+  background: var(--accent-active);
+  transform: translateY(1px);
+}
+
+.button-link.disabled-link {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
 /* ---- Focus (keyboard accessibility) ---- */
 
 button:focus-visible,
 input:focus-visible,
-li[role='option']:focus-visible {
+li[role='option']:focus-visible,
+.button-link:focus-visible,
+.modal-close-btn:focus-visible,
+.guide-content a:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
@@ -397,4 +492,194 @@ input[type='text']:focus {
   border-radius: var(--radius);
   padding: 1px var(--space-1);
   flex-shrink: 0;
+}
+
+/* Groups a list item's secondary/trailing bits (id, "Last used" tag) on the
+   right so the row still has exactly two flex children for `space-between`
+   -- the primary name on the left, this group on the right. */
+.app-list-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.app-list .channel-id {
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    'Liberation Mono',
+    Menlo,
+    monospace;
+}
+
+/* ---- Help modal ---- */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  z-index: 100;
+}
+
+.modal-overlay[hidden] {
+  display: none;
+}
+
+.modal {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  width: 100%;
+  max-width: 640px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.modal-close-btn {
+  background: transparent;
+  border: none;
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 1.5rem;
+  line-height: 1;
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+}
+
+.modal-close-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.modal-content {
+  padding: var(--space-4);
+  overflow-y: auto;
+}
+
+/* ---- Guide content typography (rendered GETTING-STARTED.md), scoped so
+   it doesn't leak into the rest of the app's own type scale ---- */
+
+.guide-content h1,
+.guide-content h2,
+.guide-content h3 {
+  margin: var(--space-4) 0 var(--space-2);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.guide-content h1:first-child,
+.guide-content h2:first-child,
+.guide-content h3:first-child {
+  margin-top: 0;
+}
+
+.guide-content h1 {
+  font-size: 1.2rem;
+}
+
+.guide-content h2 {
+  font-size: 1.05rem;
+}
+
+.guide-content h3 {
+  font-size: 0.95rem;
+}
+
+.guide-content p {
+  margin: 0 0 var(--space-3);
+  color: var(--text);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.guide-content ul,
+.guide-content ol {
+  margin: 0 0 var(--space-3);
+  padding-left: var(--space-6);
+  color: var(--text);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.guide-content li {
+  margin-bottom: var(--space-1);
+}
+
+.guide-content li > ul,
+.guide-content li > ol {
+  margin-top: var(--space-1);
+  margin-bottom: 0;
+}
+
+.guide-content strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.guide-content code {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-size: 0.82em;
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    'Liberation Mono',
+    Menlo,
+    monospace;
+}
+
+.guide-content a {
+  color: var(--accent);
+}
+
+.guide-content a:hover {
+  color: var(--accent-hover);
+}
+
+.guide-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 var(--space-3);
+  font-size: 0.85rem;
+}
+
+.guide-content th,
+.guide-content td {
+  border: 1px solid var(--border);
+  padding: var(--space-1) var(--space-2);
+  text-align: left;
+}
+
+.guide-content hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: var(--space-4) 0;
 }

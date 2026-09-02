@@ -5,6 +5,10 @@ node_modules/
 dist/
 release/
 
+# Generated from GETTING-STARTED.md at build time by scripts/build-guide.js
+# -- regenerated on every build, never stale, never manually edited.
+src/renderer/guideContent.generated.ts
+
 # Secrets / local config -- never committed. The bot token is never even
 # written to a project-relative file (it lives encrypted in the OS userData
 # dir via safeStorage), but these are excluded defensively anyway.

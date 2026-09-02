@@ -56,9 +56,26 @@ export interface BotSetupStatus {
   connected: boolean;
   /** Bot's own username once connected, for display purposes. */
   botUsername: string | null;
+  /** Bot's own OAuth2 application id (Discord's "Client ID"), populated once connected. */
+  clientId: string | null;
+  /** Ready-to-open invite URL built from `clientId`, or null before the first successful login. */
+  inviteUrl: string | null;
+  /**
+   * Plain-language reason the most recent login attempt failed, or null if
+   * there hasn't been a failure since the last successful login (or none
+   * has been attempted yet). Lets the GUI explain a stuck "not connected"
+   * state -- e.g. a stored token that was revoked while the app was
+   * closed -- without the user needing to know to check logs.
+   */
+  connectError: string | null;
 }
 
 export interface SaveTokenResult {
+  ok: boolean;
+  errorMessage: string | null;
+}
+
+export interface CopyInviteLinkResult {
   ok: boolean;
   errorMessage: string | null;
 }
@@ -67,6 +84,14 @@ export interface SaveTokenResult {
 export interface VoiceChannelInfo {
   id: string;
   name: string;
+  /**
+   * Name of the parent category channel, or null if this channel isn't
+   * inside a category. Two servers (or even two categories in the same
+   * server) can easily have voice channels with the identical generic name
+   * (e.g. "Canal de Voz") -- this lets the picker show the category as
+   * disambiguating context.
+   */
+  categoryName: string | null;
 }
 
 export type GuildConfigState = 'not_configured' | 'not_a_member' | 'resolved';
@@ -112,6 +137,8 @@ export interface LocalBardAPI {
 
   getBotSetupStatus(): Promise<BotSetupStatus>;
   saveBotToken(token: string): Promise<SaveTokenResult>;
+  clearBotToken(): Promise<void>;
+  copyInviteLink(): Promise<CopyInviteLinkResult>;
 
   getGuildConfig(): Promise<GuildConfigStatus>;
   onGuildConfigChanged(callback: (status: GuildConfigStatus) => void): () => void;

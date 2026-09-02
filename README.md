@@ -5,6 +5,10 @@ application's audio output and streams it into a Discord voice channel via a
 bot the app itself controls. See [`SECURITY.md`](./SECURITY.md) for the
 security model.
 
+> **Just want to use it?** Start here: [`GETTING-STARTED.md`](./GETTING-STARTED.md)
+> -- a no-coding-required guide to downloading a release and getting it
+> running. This README is for building the app from source.
+
 ## How it works
 
 1. You run the app and paste your Discord bot token once (encrypted at rest
@@ -56,16 +60,18 @@ On first launch, paste your bot token into the in-app prompt (or set
 
 ### Inviting the bot to your server
 
-In the [Discord Developer Portal](https://discord.com/developers/applications):
+The Local Bard window walks you through this as a guided wizard (Bot setup
+card), but here's the same steps written out:
 
-1. Create an application, add a **Bot** to it, and copy its token into Local
-   Bard (see above). Under **Bot**, make sure **Message Content Intent** is
-   left **off** -- this bot never reads message text, only slash commands.
-2. Under **OAuth2 -> URL Generator**, select the `bot` and
-   `applications.commands` scopes, then under **Bot Permissions** select at
-   least `Connect` and `Speak`.
-3. Open the generated URL and add the bot to your server.
-4. In Discord, run `/join <voice channel>` (you need `Connect` permission in
+1. In the [Discord Developer Portal](https://discord.com/developers/applications),
+   create an application, add a **Bot** to it, and copy its token into Local
+   Bard. Under **Bot**, make sure **Message Content Intent** is left **off**
+   -- this bot never reads message text, only slash commands.
+2. Once Local Bard connects with that token, it reads the bot's own
+   application id from Discord and builds the invite link itself -- no
+   manual OAuth2 -> URL Generator step needed. Click **Invite to your
+   server** (or copy the link) and add the bot to your server.
+3. In Discord, run `/join <voice channel>` (you need `Connect` permission in
    that channel, and either `ManageGuild` or the configured control role to
    use the command at all).
 
@@ -117,11 +123,18 @@ npm run dist:win      # NSIS installer (electron-builder) -- see Windows section
 
 ### Linux -- fully functional today
 
-Per-application capture uses `pw-dump` to enumerate PipeWire audio-output
-streams (falling back to `pactl list sink-inputs` if PipeWire's CLI tools
-aren't present) and `pw-record --target-object <node-id>` (or `parec
---monitor-stream=<id>` as the PulseAudio-only fallback) to capture just that
-stream's raw PCM. If neither backend is available, the GUI shows a clear
+Per-application capture runs a single long-lived `pw-record` process with
+PipeWire's auto-connect disabled (`node.autoconnect = false`), and links its
+input ports to the target app's `Stream/Output/Audio` output ports
+explicitly with `pw-link`, re-linking whenever the target reappears (falling
+back to `pactl`/`parec --monitor-stream=<id>` if PipeWire's CLI tools aren't
+present). This isn't just style: `pw-record --target <node>` alone only
+sets an auto-connect *hint* -- once the target's node is torn down (normal
+after a period of silence) and PipeWire's auto-connect policy re-links the
+orphaned input ports, it silently picks the system's default source (the
+microphone) instead, with no error. Disabling auto-connect and managing the
+exact links ourselves is what keeps a period of silence from ever leaking
+into the microphone. If neither backend is available, the GUI shows a clear
 error instead of crashing or silently capturing nothing.
 
 ### Windows -- native helper required

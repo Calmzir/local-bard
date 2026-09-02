@@ -1,7 +1,8 @@
-import { ipcMain, type BrowserWindow } from 'electron';
+import { clipboard, ipcMain, type BrowserWindow } from 'electron';
 import { IPC } from '../../shared/ipcChannels';
 import type {
   BotSetupStatus,
+  CopyInviteLinkResult,
   GuildConfigStatus,
   JoinVoiceChannelResult,
   SaveGuildIdResult,
@@ -11,7 +12,7 @@ import type {
 import type { StreamingManager } from '../streaming/StreamingManager';
 import type { BotController } from '../bot/client';
 import type { GuildController } from '../guild/GuildController';
-import { hasStoredToken, loadToken, saveToken } from '../secureStorage';
+import { clearToken, hasStoredToken, loadToken, saveToken } from '../secureStorage';
 
 export interface RegisterIpcOptions {
   window: BrowserWindow;
@@ -55,6 +56,9 @@ export function registerIpcHandlers(options: RegisterIpcOptions): void {
       hasToken: hasStoredToken(),
       connected: botController.isConnected(),
       botUsername: botController.getUsername(),
+      clientId: botController.getClientId(),
+      inviteUrl: botController.getInviteUrl(),
+      connectError: botController.getLastLoginError(),
     };
   });
 
@@ -63,10 +67,37 @@ export function registerIpcHandlers(options: RegisterIpcOptions): void {
       return { ok: false, errorMessage: 'Invalid token.' };
     }
     const result = saveToken(token);
-    if (result.ok) {
-      await onTokenSaved(token);
+    if (!result.ok) {
+      return result;
     }
-    return result;
+    // Wait for the actual login outcome (connected vs. a specific
+    // failure) before responding -- no more fire-and-forget. The token is
+    // already persisted at this point regardless of whether login
+    // succeeds; CLEAR_BOT_TOKEN (see below) is the escape hatch if it
+    // doesn't, so this never leaves the user stuck.
+    try {
+      await onTokenSaved(token);
+      return { ok: true, errorMessage: null };
+    } catch {
+      return {
+        ok: false,
+        errorMessage: botController.getLastLoginError() ?? 'Failed to connect to Discord with this token.',
+      };
+    }
+  });
+
+  ipcMain.handle(IPC.CLEAR_BOT_TOKEN, async (): Promise<void> => {
+    clearToken();
+    await botController.logout();
+  });
+
+  ipcMain.handle(IPC.COPY_INVITE_LINK, async (): Promise<CopyInviteLinkResult> => {
+    const inviteUrl = botController.getInviteUrl();
+    if (!inviteUrl) {
+      return { ok: false, errorMessage: 'Not connected yet -- there is no invite link to copy.' };
+    }
+    clipboard.writeText(inviteUrl);
+    return { ok: true, errorMessage: null };
   });
 
   ipcMain.handle(IPC.GET_GUILD_CONFIG, async (): Promise<GuildConfigStatus> => {

@@ -14,6 +14,8 @@ export const IPC = {
   STATUS_CHANGED: 'bard:statusChanged',
   GET_BOT_SETUP_STATUS: 'bard:getBotSetupStatus',
   SAVE_BOT_TOKEN: 'bard:saveBotToken',
+  CLEAR_BOT_TOKEN: 'bard:clearBotToken',
+  COPY_INVITE_LINK: 'bard:copyInviteLink',
 
   GET_GUILD_CONFIG: 'bard:getGuildConfig',
   SAVE_GUILD_ID: 'bard:saveGuildId',

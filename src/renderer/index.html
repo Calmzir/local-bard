@@ -11,22 +11,68 @@
   </head>
   <body>
     <main>
-      <header>
-        <h1>Local Bard</h1>
-        <p class="subtitle">Stream one app's audio into a Discord voice channel.</p>
+      <header class="row space-between">
+        <div>
+          <h1>Local Bard</h1>
+          <p class="subtitle">Stream one app's audio into a Discord voice channel.</p>
+        </div>
+        <button id="help-btn" type="button" class="secondary" aria-haspopup="dialog" aria-controls="help-modal">
+          Help
+        </button>
       </header>
 
-      <section id="token-section" class="card" hidden>
+      <section id="token-section" class="card">
         <h2>Bot setup</h2>
-        <p>Paste your Discord bot token once. It is encrypted with your OS keychain and never leaves this device in plaintext.</p>
-        <div class="field">
-          <label for="token-input">Bot token</label>
+
+        <ol id="bot-setup-steps" class="wizard-steps">
+          <li class="wizard-step">
+            <h3>1. Create your bot</h3>
+            <p>
+              Open the Discord Developer Portal, click <strong>New Application</strong>, then add a
+              <strong>Bot</strong> to it. Under <strong>Bot</strong>, click <strong>Reset Token</strong> and copy
+              the token it shows you -- leave <strong>Message Content Intent</strong> off, this bot never reads
+              message text. We can't link straight to your bot's page here -- it doesn't exist yet until you
+              create it in the Portal.
+            </p>
+            <a
+              id="create-bot-link"
+              class="button-link"
+              href="https://discord.com/developers/applications"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Open Discord Developer Portal</a
+            >
+          </li>
+          <li class="wizard-step">
+            <h3>2. Paste it here</h3>
+            <p>It is encrypted with your OS keychain and never leaves this device in plaintext.</p>
+            <div class="field">
+              <label for="token-input">Bot token</label>
+              <div class="row">
+                <input id="token-input" type="password" placeholder="Paste token here" autocomplete="off" />
+                <button id="token-save-btn" type="button">Save token</button>
+              </div>
+            </div>
+            <p id="token-status" class="hint" role="status"></p>
+            <p id="token-error" class="error" hidden></p>
+          </li>
+        </ol>
+
+        <div id="bot-connected-view" hidden>
+          <p class="hint status-line">
+            <span class="status-dot status-dot--ok" aria-hidden="true"></span>
+            Connected as <strong id="bot-username-display">-</strong>.
+          </p>
+          <p>Add the bot to your server, then run <code>/join</code> in Discord to bring it into a voice channel.</p>
           <div class="row">
-            <input id="token-input" type="password" placeholder="Paste token here" autocomplete="off" />
-            <button id="token-save-btn" type="button">Save token</button>
+            <a id="invite-link" class="button-link" href="#" target="_blank" rel="noopener noreferrer"
+              >Invite to your server</a
+            >
+            <button id="copy-invite-btn" type="button" class="secondary">Copy invite link</button>
           </div>
+          <p id="invite-status" class="hint" role="status"></p>
+          <button id="change-token-btn" type="button" class="secondary">Change token</button>
         </div>
-        <p id="token-status" class="hint" role="status"></p>
       </section>
 
       <section class="card">
@@ -102,6 +148,24 @@
         </div>
       </section>
     </main>
+
+    <div id="help-modal-overlay" class="modal-overlay" hidden>
+      <div
+        id="help-modal"
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="help-modal-title"
+        tabindex="-1"
+      >
+        <div class="modal-header">
+          <h2 id="help-modal-title">Getting Started</h2>
+          <button id="help-modal-close-btn" type="button" class="modal-close-btn" aria-label="Close">&times;</button>
+        </div>
+        <div id="help-modal-content" class="modal-content guide-content"></div>
+      </div>
+    </div>
+
     <script type="module" src="./index.js"></script>
   </body>
 </html>

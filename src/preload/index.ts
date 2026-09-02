@@ -3,6 +3,7 @@ import { IPC } from '../shared/ipcChannels';
 import type {
   BotSetupStatus,
   CapturableApp,
+  CopyInviteLinkResult,
   GuildConfigStatus,
   JoinVoiceChannelResult,
   LocalBardAPI,
@@ -48,6 +49,14 @@ const api: LocalBardAPI = {
 
   saveBotToken(token: string): Promise<SaveTokenResult> {
     return ipcRenderer.invoke(IPC.SAVE_BOT_TOKEN, token);
+  },
+
+  clearBotToken(): Promise<void> {
+    return ipcRenderer.invoke(IPC.CLEAR_BOT_TOKEN);
+  },
+
+  copyInviteLink(): Promise<CopyInviteLinkResult> {
+    return ipcRenderer.invoke(IPC.COPY_INVITE_LINK);
   },
 
   getGuildConfig(): Promise<GuildConfigStatus> {
