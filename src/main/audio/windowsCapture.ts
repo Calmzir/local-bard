@@ -126,7 +126,11 @@ export class WindowsAudioCapture implements AudioCaptureSource {
     // that assumption is wrong, this needs the same poll-and-wait treatment
     // as LinuxAudioCapture (emit 'waiting', retry activation, emit 'live'
     // once it succeeds).
-    output.emit('live');
+    // Deferred: startCapture() has not returned yet, so the caller (see
+    // StreamingManager.startStreaming) hasn't attached its 'live' listener
+    // -- an emit right here would fire on zero listeners and be lost,
+    // leaving the UI stuck on "connecting" forever.
+    process.nextTick(() => output.emit('live'));
 
     return output;
   }

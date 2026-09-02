@@ -63,9 +63,24 @@ internal static class ProcessLoopbackCapture
 
     private const int AUDCLNT_SHAREMODE_SHARED = 0;
     private const uint AUDCLNT_STREAMFLAGS_LOOPBACK = 0x00020000;
+    private const uint AUDCLNT_STREAMFLAGS_EVENTCALLBACK = 0x00040000;
     private const int AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK = 1;
     private const int PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE = 0;
     private const ushort VT_BLOB = 65;
+
+    // Event-driven capture, as Microsoft's own "ApplicationLoopback" sample
+    // uses, lets the audio engine wake this thread only when a real packet
+    // is ready, instead of guessing a poll interval.
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr CreateEventW(IntPtr lpEventAttributes, bool bManualReset, bool bInitialState, string? lpName);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
+
+    [DllImport("kernel32.dll")]
+    private static extern bool CloseHandle(IntPtr hObject);
+
+    private const uint WAIT_OBJECT_0 = 0;
 
     [DllImport("Mmdevapi.dll", PreserveSig = true)]
     private static extern int ActivateAudioInterfaceAsync(
@@ -180,15 +195,15 @@ internal static class ProcessLoopbackCapture
             },
         };
 
-        // TODO(windows-verify): PROPVARIANT construction. VT_BLOB expects
-        // { cbSize: uint, pBlobData: pointer } at offset 8 of a 16-byte
-        // PROPVARIANT (the first 8 bytes are vt + reserved words). This is
-        // built manually with AllocHGlobal below rather than via
-        // System.Runtime.InteropServices.ComTypes because that namespace has
-        // no ready-made VT_BLOB helper; double-check the offsets against a
-        // real `propidl.h` PROPVARIANT definition if activation fails.
+        // PROPVARIANT layout: an 8-byte header (vt + 3 reserved WORDs)
+        // followed by the BLOB union member { ULONG cbSize; BYTE *pBlobData; }.
+        // On x64, pBlobData (8 bytes) is pointer-aligned, so it sits at
+        // offset 16 (4 bytes of padding after cbSize at offset 8) -- total
+        // struct size 24 bytes, not 16. Getting this wrong overflows the
+        // allocation and corrupts the heap, crashing inside
+        // ActivateAudioInterfaceAsync with an AccessViolationException.
         var paramsPtr = Marshal.AllocHGlobal(Marshal.SizeOf<AUDIOCLIENT_ACTIVATION_PARAMS>());
-        var propvariantPtr = Marshal.AllocHGlobal(16);
+        var propvariantPtr = Marshal.AllocHGlobal(24);
         try
         {
             Marshal.StructureToPtr(activationParams, paramsPtr, false);
@@ -198,7 +213,7 @@ internal static class ProcessLoopbackCapture
             Marshal.WriteInt16(propvariantPtr, 4, 0);
             Marshal.WriteInt16(propvariantPtr, 6, 0);
             Marshal.WriteInt32(propvariantPtr, 8, Marshal.SizeOf<AUDIOCLIENT_ACTIVATION_PARAMS>());
-            Marshal.WriteIntPtr(propvariantPtr, 12, paramsPtr);
+            Marshal.WriteIntPtr(propvariantPtr, 16, paramsPtr);
 
             var handler = new CompletionHandler();
             var hr = ActivateAudioInterfaceAsync(
@@ -233,71 +248,136 @@ internal static class ProcessLoopbackCapture
 
     private static void RunCaptureLoop(IAudioClient audioClient, Stream output, CancellationToken cancellationToken)
     {
-        var hrMix = audioClient.GetMixFormat(out var mixFormatPtr);
-        Marshal.ThrowExceptionForHR(hrMix);
-        var mixFormat = Marshal.PtrToStructure<WAVEFORMATEX>(mixFormatPtr);
+        // Process-loopback virtual audio clients (VAD\Process_Loopback) do
+        // not implement GetMixFormat -- it returns E_NOTIMPL. Build the
+        // format ourselves: 32-bit IEEE float, stereo, 48kHz is the fixed
+        // format Windows' shared-mode audio engine mixes in, per
+        // Microsoft's "ApplicationLoopback" sample.
+        const ushort WAVE_FORMAT_IEEE_FLOAT = 3;
+        var mixFormat = new WAVEFORMATEX
+        {
+            wFormatTag = WAVE_FORMAT_IEEE_FLOAT,
+            nChannels = 2,
+            nSamplesPerSec = 48000,
+            wBitsPerSample = 32,
+            nBlockAlign = 2 * (32 / 8),
+            nAvgBytesPerSec = 48000 * 2u * (32u / 8u),
+            cbSize = 0,
+        };
+        var mixFormatPtr = Marshal.AllocHGlobal(Marshal.SizeOf<WAVEFORMATEX>());
 
         const long refTimesPerSecond = 10_000_000;
         const long bufferDurationHns = refTimesPerSecond; // 1 second buffer.
 
-        var hrInit = audioClient.Initialize(
-            AUDCLNT_SHAREMODE_SHARED,
-            AUDCLNT_STREAMFLAGS_LOOPBACK,
-            bufferDurationHns,
-            0,
-            mixFormatPtr,
-            IntPtr.Zero);
-        Marshal.ThrowExceptionForHR(hrInit);
+        IAudioCaptureClient captureClient;
+        WaveFormat sourceFormat;
+        try
+        {
+            Marshal.StructureToPtr(mixFormat, mixFormatPtr, false);
 
-        var hrService = audioClient.GetService(IID_IAudioCaptureClient, out var captureClientObj);
-        Marshal.ThrowExceptionForHR(hrService);
-        var captureClient = (IAudioCaptureClient)captureClientObj;
+            var hrInit = audioClient.Initialize(
+                AUDCLNT_SHAREMODE_SHARED,
+                AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+                bufferDurationHns,
+                0,
+                mixFormatPtr,
+                IntPtr.Zero);
+            Marshal.ThrowExceptionForHR(hrInit);
 
-        var sourceFormat = ToNAudioWaveFormat(mixFormat);
+            var hrService = audioClient.GetService(IID_IAudioCaptureClient, out var captureClientObj);
+            Marshal.ThrowExceptionForHR(hrService);
+            captureClient = (IAudioCaptureClient)captureClientObj;
+
+            sourceFormat = ToNAudioWaveFormat(mixFormat);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(mixFormatPtr);
+        }
+
         var targetFormat = new WaveFormat(48000, 16, 2);
         var resampler = BuildResampler(sourceFormat, targetFormat);
 
-        var startHr = audioClient.Start();
-        Marshal.ThrowExceptionForHR(startHr);
+        var packetEvent = CreateEventW(IntPtr.Zero, false, false, null);
+        if (packetEvent == IntPtr.Zero)
+        {
+            throw new InvalidOperationException("CreateEventW failed for the audio packet-ready event.");
+        }
 
         try
         {
-            // Polling loop rather than event-driven capture -- see
-            // TODO(windows-verify) item 5 on the class doc comment about
-            // revisiting this for lower/steadier latency.
-            while (!cancellationToken.IsCancellationRequested)
+            var hrEvent = audioClient.SetEventHandle(packetEvent);
+            Marshal.ThrowExceptionForHR(hrEvent);
+
+            var startHr = audioClient.Start();
+            Marshal.ThrowExceptionForHR(startHr);
+
+            // ponytail: a burst delivery from the engine (e.g. the thread
+            // gets scheduled late and several packets have queued up) is
+            // paced back out to real time here, so a downstream real-time
+            // consumer (Discord) always gets audio at 1x instead of bursts.
+            // Source and target are both 48kHz, so 1 source frame == 1
+            // target frame with no resampling needed to compare counts.
+            var realTime = System.Diagnostics.Stopwatch.StartNew();
+            long framesWritten = 0;
+
+            try
             {
-                captureClient.GetNextPacketSize(out var framesAvailable);
-                if (framesAvailable == 0)
+                while (!cancellationToken.IsCancellationRequested)
                 {
-                    Thread.Sleep(10);
-                    continue;
-                }
-
-                var hrBuf = captureClient.GetBuffer(out var dataPtr, out var numFrames, out var flags, out _, out _);
-                Marshal.ThrowExceptionForHR(hrBuf);
-
-                const uint AUDCLNT_BUFFERFLAGS_SILENT = 0x2;
-                var byteCount = (int)(numFrames * sourceFormat.BlockAlign);
-                if (byteCount > 0)
-                {
-                    var buffer = new byte[byteCount];
-                    if ((flags & AUDCLNT_BUFFERFLAGS_SILENT) == 0)
+                    var waitResult = WaitForSingleObject(packetEvent, 200);
+                    if (waitResult != WAIT_OBJECT_0)
                     {
-                        Marshal.Copy(dataPtr, buffer, 0, byteCount);
+                        continue; // timeout -- just recheck cancellation.
                     }
-                    // else: leave as zeroed silence.
 
-                    resampler.Feed(buffer, output);
+                    // Drain everything the engine handed us this wake-up.
+                    while (!cancellationToken.IsCancellationRequested)
+                    {
+                        var hrNext = captureClient.GetNextPacketSize(out var framesAvailable);
+                        Marshal.ThrowExceptionForHR(hrNext);
+                        if (framesAvailable == 0)
+                        {
+                            break;
+                        }
+
+                        var expectedElapsedMs = framesWritten * 1000 / sourceFormat.SampleRate;
+                        var actualElapsedMs = realTime.ElapsedMilliseconds;
+                        if (expectedElapsedMs > actualElapsedMs)
+                        {
+                            Thread.Sleep((int)(expectedElapsedMs - actualElapsedMs));
+                        }
+
+                        var hrBuf = captureClient.GetBuffer(out var dataPtr, out var numFrames, out var flags, out _, out _);
+                        Marshal.ThrowExceptionForHR(hrBuf);
+                        framesWritten += numFrames;
+
+                        const uint AUDCLNT_BUFFERFLAGS_SILENT = 0x2;
+                        var byteCount = (int)(numFrames * sourceFormat.BlockAlign);
+                        if (byteCount > 0)
+                        {
+                            var buffer = new byte[byteCount];
+                            if ((flags & AUDCLNT_BUFFERFLAGS_SILENT) == 0)
+                            {
+                                Marshal.Copy(dataPtr, buffer, 0, byteCount);
+                            }
+                            // else: leave as zeroed silence.
+
+                            resampler.Feed(buffer, output);
+                        }
+
+                        captureClient.ReleaseBuffer(numFrames);
+                    }
                 }
-
-                captureClient.ReleaseBuffer(numFrames);
+            }
+            finally
+            {
+                audioClient.Stop();
             }
         }
         finally
         {
-            audioClient.Stop();
-            Marshal.FreeCoTaskMem(mixFormatPtr);
+            CloseHandle(packetEvent);
         }
     }
 
@@ -345,6 +425,12 @@ internal static class ProcessLoopbackCapture
             {
                 BufferDuration = TimeSpan.FromSeconds(5),
                 DiscardOnBufferOverflow = true,
+                // BufferedWaveProvider.ReadFully defaults to true, which pads
+                // short reads with silence instead of returning fewer bytes
+                // -- Read() then never returns 0, so the drain loop in Feed()
+                // below never terminates once any data has been buffered
+                // (observed: an unbounded stream of manufactured silence).
+                ReadFully = false,
             };
 
             ISampleProvider samples = _input.ToSampleProvider();
