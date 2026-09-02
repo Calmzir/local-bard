@@ -3,12 +3,10 @@ import { IPC } from '../shared/ipcChannels';
 import type {
   BotSetupStatus,
   CapturableApp,
+  GuildConfigStatus,
   JoinVoiceChannelResult,
   LocalBardAPI,
-  ManageableGuild,
-  OAuthClientSetupStatus,
-  OAuthLoginStatus,
-  SaveOAuthClientResult,
+  SaveGuildIdResult,
   SaveTokenResult,
   StreamingStatus,
 } from '../shared/types';
@@ -52,38 +50,22 @@ const api: LocalBardAPI = {
     return ipcRenderer.invoke(IPC.SAVE_BOT_TOKEN, token);
   },
 
-  getOAuthClientStatus(): Promise<OAuthClientSetupStatus> {
-    return ipcRenderer.invoke(IPC.GET_OAUTH_CLIENT_STATUS);
+  getGuildConfig(): Promise<GuildConfigStatus> {
+    return ipcRenderer.invoke(IPC.GET_GUILD_CONFIG);
   },
 
-  saveOAuthClient(clientId: string, clientSecret: string): Promise<SaveOAuthClientResult> {
-    return ipcRenderer.invoke(IPC.SAVE_OAUTH_CLIENT, clientId, clientSecret);
+  onGuildConfigChanged(callback: (status: GuildConfigStatus) => void): () => void {
+    const listener = (_event: IpcRendererEvent, status: GuildConfigStatus) => callback(status);
+    ipcRenderer.on(IPC.GUILD_CONFIG_CHANGED, listener);
+    return () => ipcRenderer.removeListener(IPC.GUILD_CONFIG_CHANGED, listener);
   },
 
-  getOAuthLoginStatus(): Promise<OAuthLoginStatus> {
-    return ipcRenderer.invoke(IPC.GET_OAUTH_LOGIN_STATUS);
+  saveGuildId(guildId: string): Promise<SaveGuildIdResult> {
+    return ipcRenderer.invoke(IPC.SAVE_GUILD_ID, guildId);
   },
 
-  onOAuthLoginStatusChanged(callback: (status: OAuthLoginStatus) => void): () => void {
-    const listener = (_event: IpcRendererEvent, status: OAuthLoginStatus) => callback(status);
-    ipcRenderer.on(IPC.OAUTH_LOGIN_STATUS_CHANGED, listener);
-    return () => ipcRenderer.removeListener(IPC.OAUTH_LOGIN_STATUS_CHANGED, listener);
-  },
-
-  startOAuthLogin(): Promise<void> {
-    return ipcRenderer.invoke(IPC.START_OAUTH_LOGIN);
-  },
-
-  oauthLogout(): Promise<void> {
-    return ipcRenderer.invoke(IPC.OAUTH_LOGOUT);
-  },
-
-  listManageableGuilds(): Promise<ManageableGuild[]> {
-    return ipcRenderer.invoke(IPC.LIST_MANAGEABLE_GUILDS);
-  },
-
-  joinGuildVoiceChannel(guildId: string, channelId: string): Promise<JoinVoiceChannelResult> {
-    return ipcRenderer.invoke(IPC.JOIN_GUILD_VOICE_CHANNEL, guildId, channelId);
+  joinGuildVoiceChannel(channelId: string): Promise<JoinVoiceChannelResult> {
+    return ipcRenderer.invoke(IPC.JOIN_GUILD_VOICE_CHANNEL, channelId);
   },
 };
 

@@ -15,12 +15,8 @@ export const IPC = {
   GET_BOT_SETUP_STATUS: 'bard:getBotSetupStatus',
   SAVE_BOT_TOKEN: 'bard:saveBotToken',
 
-  GET_OAUTH_CLIENT_STATUS: 'bard:getOAuthClientStatus',
-  SAVE_OAUTH_CLIENT: 'bard:saveOAuthClient',
-  GET_OAUTH_LOGIN_STATUS: 'bard:getOAuthLoginStatus',
-  OAUTH_LOGIN_STATUS_CHANGED: 'bard:oauthLoginStatusChanged',
-  START_OAUTH_LOGIN: 'bard:startOAuthLogin',
-  OAUTH_LOGOUT: 'bard:oauthLogout',
-  LIST_MANAGEABLE_GUILDS: 'bard:listManageableGuilds',
+  GET_GUILD_CONFIG: 'bard:getGuildConfig',
+  SAVE_GUILD_ID: 'bard:saveGuildId',
+  GUILD_CONFIG_CHANGED: 'bard:guildConfigChanged',
   JOIN_GUILD_VOICE_CHANNEL: 'bard:joinGuildVoiceChannel',
 } as const;

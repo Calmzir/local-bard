@@ -20,9 +20,18 @@
  * `"types": []` so Node's ambient globals never leak into browser code.
  */
 
-/** A single running, audio-capable application the user can pick from. */
+/**
+ * A single currently-running application the user can pick from -- it does
+ * NOT need to be producing audio yet. Identity is based on executable/binary
+ * name, not PID: multi-process apps (every modern browser) run many OS
+ * processes under one binary, and the process that eventually owns an audio
+ * stream is often not the PID shown as the app's main process. `id` is
+ * therefore one entry per distinct binary (e.g. Linux's `proc:<binary>`),
+ * never per-PID, and platform capture implementations must match a later
+ * audio stream back to this app by binary name.
+ */
 export interface CapturableApp {
-  /** Stable id for this run of the app (PipeWire node id / pid / helper id). */
+  /** Stable id for this binary (see class doc above) -- not a PID. */
   id: string;
   /** Human-readable name to show in the GUI. */
   name: string;
@@ -30,7 +39,7 @@ export interface CapturableApp {
   processName: string;
 }
 
-export type StreamingState = 'idle' | 'connecting' | 'live' | 'error';
+export type StreamingState = 'idle' | 'connecting' | 'waiting_for_audio' | 'live' | 'error';
 
 export interface StreamingStatus {
   state: StreamingState;
@@ -54,40 +63,33 @@ export interface SaveTokenResult {
   errorMessage: string | null;
 }
 
-/** Whether the OAuth Client ID/Secret (Joel's own Discord Application) are already stored. */
-export interface OAuthClientSetupStatus {
-  hasClientCredentials: boolean;
-}
-
-export interface SaveOAuthClientResult {
-  ok: boolean;
-  errorMessage: string | null;
-}
-
-export type OAuthLoginState = 'idle' | 'waiting_for_browser' | 'exchanging' | 'logged_in' | 'error';
-
-export interface OAuthLoginStatus {
-  state: OAuthLoginState;
-  /** The logged-in Discord user's username, once `state` is 'logged_in'. */
-  username: string | null;
-  errorMessage: string | null;
-}
-
 /** A voice-based channel in a guild the bot is a member of. */
 export interface VoiceChannelInfo {
   id: string;
   name: string;
 }
 
+export type GuildConfigState = 'not_configured' | 'not_a_member' | 'resolved';
+
 /**
- * A guild in the intersection of "bot is a member" and "logged-in user has
- * MANAGE_GUILD permission in" -- the only guilds surfaced for the "join
- * from the GUI" feature.
+ * Status of the single configured Discord server (guild) id, resolved
+ * directly through the bot's own connection (`client.guilds.cache`) --
+ * there is no separate user login here, just "is a guild id saved, and is
+ * the bot currently a member of it".
  */
-export interface ManageableGuild {
-  id: string;
-  name: string;
+export interface GuildConfigStatus {
+  state: GuildConfigState;
+  /** The configured guild id, or null if none has been saved yet. */
+  guildId: string | null;
+  /** The guild's name, once resolved (state === 'resolved'). */
+  guildName: string | null;
+  /** The guild's voice channels, once resolved (state === 'resolved'). */
   voiceChannels: VoiceChannelInfo[];
+}
+
+export interface SaveGuildIdResult {
+  ok: boolean;
+  errorMessage: string | null;
 }
 
 export interface JoinVoiceChannelResult {
@@ -111,12 +113,8 @@ export interface LocalBardAPI {
   getBotSetupStatus(): Promise<BotSetupStatus>;
   saveBotToken(token: string): Promise<SaveTokenResult>;
 
-  getOAuthClientStatus(): Promise<OAuthClientSetupStatus>;
-  saveOAuthClient(clientId: string, clientSecret: string): Promise<SaveOAuthClientResult>;
-  getOAuthLoginStatus(): Promise<OAuthLoginStatus>;
-  onOAuthLoginStatusChanged(callback: (status: OAuthLoginStatus) => void): () => void;
-  startOAuthLogin(): Promise<void>;
-  oauthLogout(): Promise<void>;
-  listManageableGuilds(): Promise<ManageableGuild[]>;
-  joinGuildVoiceChannel(guildId: string, channelId: string): Promise<JoinVoiceChannelResult>;
+  getGuildConfig(): Promise<GuildConfigStatus>;
+  onGuildConfigChanged(callback: (status: GuildConfigStatus) => void): () => void;
+  saveGuildId(guildId: string): Promise<SaveGuildIdResult>;
+  joinGuildVoiceChannel(channelId: string): Promise<JoinVoiceChannelResult>;
 }

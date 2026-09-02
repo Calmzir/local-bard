@@ -10,10 +10,10 @@ export interface VoiceJoinResult {
 /**
  * The single implementation of "join this voice channel and hand the
  * connection to the streaming pipeline". Used by both the `/join` slash
- * command (bot/commands.ts) and the local GUI's OAuth-driven "join this
- * channel" action (oauth/OAuthController.ts) -- callers are responsible for
- * their own authorization check before calling this; it does not re-derive
- * permissions itself.
+ * command (bot/commands.ts) and the local GUI's "join this channel" action
+ * scoped to the configured guild (guild/GuildController.ts) -- callers are
+ * responsible for their own authorization check before calling this; it
+ * does not re-derive permissions itself.
  */
 export async function joinVoiceChannelAndAttach(
   guild: Guild,

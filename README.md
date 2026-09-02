@@ -73,51 +73,30 @@ Slash commands are registered per-guild (not globally), so they show up
 immediately in every server the bot is in -- no waiting for Discord's
 up-to-an-hour global command propagation.
 
-## Discord login (auto-detect manageable servers)
+## Configuring the server (Guild ID)
 
-The GUI can optionally show you the servers where **both** (a) the bot is
-already a member and (b) you personally have `Manage Server` permission --
-letting you pick a server and voice channel and join directly from the app
-window, instead of typing `/join` in Discord. This uses your own Discord
-account via OAuth2 (Authorization Code + PKCE), requesting only the
-`identify` and `guilds` scopes -- both read-only. See
-[`SECURITY.md`](./SECURITY.md) for exactly what this can and can't do.
+The GUI can show you the configured server's name and voice channels --
+letting you pick one and join directly from the app window, instead of
+typing `/join` in Discord. This just points the app at a server by ID; it
+uses the bot's own connection to resolve it (`client.guilds.cache`), not a
+separate user login.
 
-### One-time setup (required before this feature works)
+To find your server's Guild ID:
 
-Discord's OAuth2 token endpoint requires a Client Secret on every exchange,
-so this step is mandatory even with PKCE. In the
-[Discord Developer Portal](https://discord.com/developers/applications),
-open the **same application** the bot token comes from:
+1. In Discord, open **User Settings -> Advanced** and enable **Developer
+   Mode**.
+2. Right-click your server's icon in the server list and choose **Copy
+   Server ID**.
+3. Paste that ID into the **Discord server** card in the Local Bard window
+   and click **Save**.
 
-1. Go to **OAuth2** in the sidebar.
-2. Under **Redirects**, click **Add Redirect** and enter exactly:
-   ```
-   http://127.0.0.1:47115/callback
-   ```
-   Save changes.
-3. Still on the **OAuth2** page, note the **Client ID**, and click **Reset
-   Secret** (or **Copy**, if one already exists) to get the **Client
-   Secret**. Treat it like a password -- it is only ever pasted into Local
-   Bard's own GUI, never shared elsewhere.
+If the bot is already a member of that server, the card immediately shows
+its name and voice channels as a clickable list -- click one to join it
+(equivalent to running `/join` for that channel). If the bot hasn't been
+invited to that server yet, the card shows a clear error instead until it
+is.
 
-### Using it
-
-1. In the Local Bard window, paste the Client ID and Client Secret into the
-   **Discord login setup** card (shown once, same as the bot token prompt).
-   Or, for dev convenience, set `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET`
-   in `.env` before `npm run dev` (same never-read-in-production rule as
-   `DISCORD_BOT_TOKEN`).
-2. Click **Sign in with Discord**. Your system browser opens Discord's
-   consent screen; approve it and return to Local Bard.
-3. Once signed in, the **Discord login** card lists every server where you
-   have `Manage Server` and the bot is present, each with its voice
-   channels as buttons -- click one to join it (equivalent to running
-   `/join` for that channel).
-4. **Log out** clears just the login session; your Client ID/Secret stay
-   saved so you don't have to re-enter them to sign in again.
-
-### Restricting who can control the bot
+## Restricting who can control the bot
 
 By default, only members with the `ManageGuild` permission can use `/join`,
 `/leave`, `/status`, `/stop`. To also allow a specific role, set
@@ -198,6 +177,15 @@ run.
   pinned to current major versions specifically to close known CVEs present
   in the versions this project would otherwise have defaulted to -- run
   `npm audit` periodically and re-pin as new advisories land.
+- **`build:preload` bundles with `esbuild` instead of plain `tsc`.** A
+  sandboxed preload script (`sandbox: true`) runs under Electron's restricted
+  preload loader, which only resolves the preload script's own file and a
+  curated set of built-ins -- it cannot `require()` other project files by
+  relative path (e.g. `../shared/ipcChannels`), even though that works fine
+  under plain Node/`tsc` output. Bundling inlines everything the preload
+  script needs into one self-contained file, which is what the sandbox
+  actually requires. `tsconfig.preload.json` is still used for type-checking
+  (`npm run typecheck`), just not for emitting the runtime file anymore.
 
 ## What is explicitly out of scope for v1
 

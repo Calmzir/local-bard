@@ -11,21 +11,9 @@ so you can answer "does this have a backdoor?" with evidence, not vibes.
   (WebSocket) and Discord voice (UDP), both initiated by the app itself.
 - There is no persistent HTTP server, no debug/RPC endpoint, and no
   auto-updater. The packaged app cannot be reached from the network, and it
-  cannot silently pull and run new code from anywhere.
-- **One narrow, intentional exception: the OAuth login callback.** When you
-  click "Sign in with Discord", the app starts a plain `node:http` server
-  bound explicitly to `127.0.0.1` (never `0.0.0.0`, so nothing outside your
-  own machine can ever reach it) on port 47115, right before opening your
-  browser to Discord's consent screen. It handles exactly **one** request --
-  Discord's redirect back with the authorization code -- verifies that
-  request's `state` parameter matches the one this login attempt generated
-  (CSRF protection), then closes itself immediately, whether that one
-  request was valid or not. If you cancel the login or it sits idle for 5
-  minutes, it closes itself the same way. At every other moment -- including
-  while the app is otherwise fully running -- this port is not listening.
-  This is safe because it is loopback-only, single-use, short-lived, and
-  CSRF-checked: even in the narrow window it is up, nothing but this exact
-  login attempt on this exact machine can complete it.
+  cannot silently pull and run new code from anywhere. There is no loopback
+  server of any kind either: the app has no user-login flow, so it never
+  needs to receive a browser redirect.
 - Renderer devtools and any Electron remote-debugging surface are disabled
   in packaged production builds (`webPreferences.devTools: !app.isPackaged`
   in `src/main/index.ts`). Devtools are only ever available when running
@@ -71,6 +59,14 @@ restricted server-side to members with the `ManageGuild` permission, or a
 specific role ID read from local (non-secret) config -- everyone else gets
 an ephemeral "you do not have permission" reply and nothing runs.
 
+The GUI's own "join this channel" action is scoped the same way: it only
+ever joins a voice channel that resolves (via the bot's own connection) as
+belonging to the one configured Guild ID, and that Guild ID is a local,
+non-secret setting (see below) -- never something read from Discord input.
+There is no separate user login or per-user permission check here; local
+trust is "whoever can open and use this desktop app", the same model
+already used for the bot token and the audio-source selection.
+
 ## Secrets are never stored in plaintext
 
 - The Discord bot token is entered once through a first-run GUI prompt and
@@ -81,48 +77,17 @@ an ephemeral "you do not have permission" reply and nothing runs.
   repository. `.gitignore` excludes `.env`, any `*.token` files, and the
   local encrypted token/config files the app writes to its userData
   directory at runtime.
-- `.env.example` documents optional dev-only convenience env vars
-  (`DISCORD_BOT_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`) that
-  are only ever read when running from source in an unpackaged dev build,
-  and even then they're immediately routed through the same `safeStorage`
-  encryption as their respective GUI paths -- never read directly by
-  anything else.
-
-## Discord login (OAuth2) is scoped to be nearly harmless if leaked
-
-- The "Sign in with Discord" feature requests only the `identify` and
-  `guilds` scopes -- both **read-only**. Neither one lets Local Bard (or
-  whoever holds the resulting token) post messages, change server settings,
-  kick/ban members, or otherwise act as you. `guilds` only returns the list
-  of servers you're in plus your permission bitfield in each; `identify`
-  only returns your basic profile (id, username).
-- The bot's own actions (joining voice, streaming audio) continue to go
-  exclusively through the bot's own token and Discord's normal per-command
-  permission checks (see "Discord commands cannot execute arbitrary input"
-  above) -- this login flow never grants it anything extra. The GUI's "join
-  this channel" button re-checks `MANAGE_GUILD` server-side against the
-  cached OAuth guild list before joining; it never trusts a guild/channel id
-  sent from the renderer as an authorization decision on its own.
-- Even though Discord's token endpoint requires a `client_id` +
-  `client_secret` on every exchange (there is no secretless/public-client
-  PKCE option -- confirmed against Discord's own OAuth2 documentation),
-  Local Bard still generates and sends a PKCE `code_verifier`/`code_challenge`
-  (S256) on every login attempt as defense-in-depth against authorization-code
-  interception, on top of the CSRF `state` check.
-- **Practical worst case if the locally-stored OAuth secrets or session
-  tokens were ever extracted from this machine:** whoever has them could
-  re-run this same read-only login and see the same read-only data
-  (identify + guild list) this app already sees. They could not send
-  messages, join voice, change any server, or otherwise act as you or as
-  the bot -- there is no code path anywhere that would let them.
-- The OAuth Client ID/Secret and the resulting login session tokens are
-  stored the same `safeStorage`-encrypted-at-rest way as the bot token, but
-  in **separate files, separate from the bot token and from each other**
-  (`oauth-client.enc`, `oauth-tokens.enc` vs. `bot-token.enc`, all under the
-  OS userData directory -- see `src/main/secureStorage.ts`). "Log out" in
-  the GUI clears only `oauth-tokens.enc` (the session); the Client
-  ID/Secret in `oauth-client.enc` are left in place so you don't have to
-  re-enter them to sign in again.
+- `.env.example` documents an optional dev-only convenience env var
+  (`DISCORD_BOT_TOKEN`) that is only ever read when running from source in
+  an unpackaged dev build, and even then it's immediately routed through
+  the same `safeStorage` encryption as its GUI path -- never read directly
+  by anything else.
+- The configured Discord server (Guild ID) is **not** a secret -- it's a
+  public-ish numeric identifier, the same trust level as a channel name --
+  so it is stored as plain local JSON config (`config.json` under the OS
+  userData directory, alongside the `controlRoleId` setting), never through
+  `safeStorage`. There is no OAuth secret, client ID, or user-login token of
+  any kind stored anywhere in this app.
 
 ## Packaging
 

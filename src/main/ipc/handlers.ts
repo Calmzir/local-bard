@@ -2,24 +2,22 @@ import { ipcMain, type BrowserWindow } from 'electron';
 import { IPC } from '../../shared/ipcChannels';
 import type {
   BotSetupStatus,
+  GuildConfigStatus,
   JoinVoiceChannelResult,
-  ManageableGuild,
-  OAuthClientSetupStatus,
-  OAuthLoginStatus,
-  SaveOAuthClientResult,
+  SaveGuildIdResult,
   SaveTokenResult,
   StreamingStatus,
 } from '../../shared/types';
 import type { StreamingManager } from '../streaming/StreamingManager';
 import type { BotController } from '../bot/client';
-import type { OAuthController } from '../oauth/OAuthController';
+import type { GuildController } from '../guild/GuildController';
 import { hasStoredToken, loadToken, saveToken } from '../secureStorage';
 
 export interface RegisterIpcOptions {
   window: BrowserWindow;
   streamingManager: StreamingManager;
   botController: BotController;
-  oauthController: OAuthController;
+  guildController: GuildController;
   /** Called after a token is saved for the first time, to trigger login. */
   onTokenSaved: (token: string) => Promise<void>;
 }
@@ -31,7 +29,7 @@ export interface RegisterIpcOptions {
  * input shape.
  */
 export function registerIpcHandlers(options: RegisterIpcOptions): void {
-  const { window, streamingManager, botController, oauthController, onTokenSaved } = options;
+  const { window, streamingManager, botController, guildController, onTokenSaved } = options;
 
   ipcMain.handle(IPC.LIST_APPS, async () => {
     return streamingManager.listApps();
@@ -71,47 +69,27 @@ export function registerIpcHandlers(options: RegisterIpcOptions): void {
     return result;
   });
 
-  ipcMain.handle(IPC.GET_OAUTH_CLIENT_STATUS, async (): Promise<OAuthClientSetupStatus> => {
-    return oauthController.getClientSetupStatus();
+  ipcMain.handle(IPC.GET_GUILD_CONFIG, async (): Promise<GuildConfigStatus> => {
+    return guildController.getStatus();
   });
 
-  ipcMain.handle(
-    IPC.SAVE_OAUTH_CLIENT,
-    async (_event, clientId: unknown, clientSecret: unknown): Promise<SaveOAuthClientResult> => {
-      if (typeof clientId !== 'string' || typeof clientSecret !== 'string') {
-        return { ok: false, errorMessage: 'Invalid client credentials.' };
-      }
-      return oauthController.saveClientCredentials(clientId, clientSecret);
-    },
-  );
-
-  ipcMain.handle(IPC.GET_OAUTH_LOGIN_STATUS, async (): Promise<OAuthLoginStatus> => {
-    return oauthController.getLoginStatus();
-  });
-
-  ipcMain.handle(IPC.START_OAUTH_LOGIN, async (): Promise<void> => {
-    // Fire-and-forget: progress/result is pushed via OAUTH_LOGIN_STATUS_CHANGED,
-    // not returned from this call, so the renderer isn't blocked on the browser.
-    void oauthController.login();
-  });
-
-  ipcMain.handle(IPC.OAUTH_LOGOUT, async (): Promise<void> => {
-    oauthController.logout();
-  });
-
-  ipcMain.handle(IPC.LIST_MANAGEABLE_GUILDS, async (): Promise<ManageableGuild[]> => {
-    return oauthController.listManageableGuilds();
+  ipcMain.handle(IPC.SAVE_GUILD_ID, async (_event, guildId: unknown): Promise<SaveGuildIdResult> => {
+    if (typeof guildId !== 'string') {
+      return { ok: false, errorMessage: 'Invalid guild id.' };
+    }
+    return guildController.saveGuildId(guildId);
   });
 
   ipcMain.handle(
     IPC.JOIN_GUILD_VOICE_CHANNEL,
-    async (_event, guildId: unknown, channelId: unknown): Promise<JoinVoiceChannelResult> => {
-      if (typeof guildId !== 'string' || guildId.length === 0 || typeof channelId !== 'string' || channelId.length === 0) {
-        return { ok: false, errorMessage: 'Invalid guild or channel id.' };
+    async (_event, channelId: unknown): Promise<JoinVoiceChannelResult> => {
+      if (typeof channelId !== 'string' || channelId.length === 0) {
+        return { ok: false, errorMessage: 'Invalid channel id.' };
       }
-      // Authorization (MANAGE_GUILD re-check) happens inside the controller,
-      // never trusting these renderer-supplied ids on their own.
-      return oauthController.joinGuildVoiceChannel(guildId, channelId);
+      // The guild id is never taken from the renderer -- it always comes
+      // from local config, and the controller re-validates the channel
+      // actually belongs to that guild before joining.
+      return guildController.joinConfiguredVoiceChannel(channelId);
     },
   );
 
@@ -121,9 +99,9 @@ export function registerIpcHandlers(options: RegisterIpcOptions): void {
     }
   });
 
-  oauthController.on('loginStatusChanged', (status: OAuthLoginStatus) => {
+  guildController.on('guildStatusChanged', (status: GuildConfigStatus) => {
     if (!window.isDestroyed()) {
-      window.webContents.send(IPC.OAUTH_LOGIN_STATUS_CHANGED, status);
+      window.webContents.send(IPC.GUILD_CONFIG_CHANGED, status);
     }
   });
 }

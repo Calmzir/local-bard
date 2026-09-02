@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import { Client, GatewayIntentBits, Events, type Guild, type VoiceBasedChannel } from 'discord.js';
 import type { StreamingManager } from '../streaming/StreamingManager';
 import { createInteractionHandler } from './commands';
@@ -10,12 +11,19 @@ import type { VoiceChannelInfo } from '../../shared/types';
  * commands) and GuildVoiceStates (for joining/leaving voice). No message
  * content intent -- this bot never reads message text, only slash command
  * interactions, so there is no freeform text execution surface.
+ *
+ * Extends EventEmitter (same pattern as `StreamingManager`) to emit
+ * 'guildsChanged' whenever the set of guilds the bot can see might have
+ * changed (ready, guildCreate, guildDelete, login, logout) -- consumers like
+ * `GuildController` use this to push fresh status to the renderer instead of
+ * polling.
  */
-export class BotController {
+export class BotController extends EventEmitter {
   private client: Client | null = null;
   private readonly streamingManager: StreamingManager;
 
   constructor(streamingManager: StreamingManager) {
+    super();
     this.streamingManager = streamingManager;
   }
 
@@ -27,7 +35,7 @@ export class BotController {
     return this.client?.user?.username ?? null;
   }
 
-  /** Guild IDs the bot is currently a member of. Used to cross-reference against the OAuth-logged-in user's MANAGE_GUILD list. */
+  /** Guild IDs the bot is currently a member of. */
   listGuildIds(): string[] {
     return this.client ? [...this.client.guilds.cache.keys()] : [];
   }
@@ -76,13 +84,19 @@ export class BotController {
       }
     });
 
+    client.once(Events.ClientReady, () => this.emit('guildsChanged'));
+    client.on(Events.GuildCreate, () => this.emit('guildsChanged'));
+    client.on(Events.GuildDelete, () => this.emit('guildsChanged'));
+
     this.client = client;
     await client.login(token);
+    this.emit('guildsChanged');
   }
 
   async logout(): Promise<void> {
     if (!this.client) return;
     await this.client.destroy();
     this.client = null;
+    this.emit('guildsChanged');
   }
 }
