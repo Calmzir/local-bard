@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <rect x="48" y="48" width="928" height="928" rx="208" fill="#4752c4"/>
+
+  <!-- Pick / plectrum silhouette: a nod to "Bard" (the musician) -->
+  <path d="M 380 296
+           C 486 296 572 382 572 486
+           C 572 572 486 700 402 748
+           C 388 756 372 756 358 748
+           C 220 668 188 560 188 486
+           C 188 382 274 296 380 296 Z"
+        fill="#f2f3f5"/>
+
+  <!-- Sound emanating to the right: streaming this instrument's audio out -->
+  <path d="M 630.7 427.7 A 110 110 0 0 1 630.7 596.3"
+        fill="none" stroke="#f2f3f5" stroke-width="34" stroke-linecap="round" opacity="1"/>
+  <path d="M 682.2 366.5 A 190 190 0 0 1 682.2 657.5"
+        fill="none" stroke="#f2f3f5" stroke-width="34" stroke-linecap="round" opacity="0.7"/>
+  <path d="M 733.6 305.2 A 270 270 0 0 1 733.6 718.8"
+        fill="none" stroke="#f2f3f5" stroke-width="34" stroke-linecap="round" opacity="0.45"/>
+</svg>

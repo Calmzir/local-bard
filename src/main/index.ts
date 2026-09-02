@@ -58,6 +58,12 @@ function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
     ...initialBounds,
     title: 'Local Bard',
+    // Sets the taskbar/alt-tab icon on Linux, where (unlike Windows) it
+    // isn't embedded in the executable -- see scripts/copy-static.js for
+    // where this file comes from. Windows gets its icon from the .exe
+    // itself (build/icon.ico, via electron-builder), so this is a no-op
+    // there beyond being a harmless correct value.
+    icon: join(__dirname, '..', 'build', 'icon.png'),
     webPreferences: {
       preload: join(__dirname, '..', 'preload', 'index.js'),
       contextIsolation: true,
