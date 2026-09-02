@@ -30,11 +30,14 @@ const HELPER_EXE_NAME = 'LocalBard.WindowsHelper.exe';
  * SessionEnumerator.cs/ProcessLoopbackCapture.cs for what specifically
  * still needs confirming on real hardware before relying on that.
  *
- * TODO(windows-verify): this module has NOT been exercised on real Windows
- * hardware. The C# helper's process-loopback activation, its JSON --list
- * output shape, and its raw PCM --capture stream all need to be verified end
- * to end on Windows 10 2004+ (see windows-helper/Program.cs for the
- * per-call TODO(windows-verify) markers on the native interop itself).
+ * The --capture path (process-loopback activation, PROPVARIANT marshaling,
+ * event-driven capture, raw PCM streaming) has now been run on real Windows
+ * hardware -- see ProcessLoopbackCapture.cs's class doc comment for what
+ * that confirmed and fixed. The --list path (SessionEnumerator.cs) has not
+ * specifically been re-verified since, and item 6 there (activating against
+ * a process with no audio session yet) remains open -- see the
+ * TODO(windows-verify) markers in SessionEnumerator.cs and
+ * ProcessLoopbackCapture.cs for exactly what's still unconfirmed.
  */
 export class WindowsAudioCapture implements AudioCaptureSource {
   private captureProcess: ChildProcessByStdio<null, Readable, Readable> | null = null;
@@ -126,7 +129,11 @@ export class WindowsAudioCapture implements AudioCaptureSource {
     // that assumption is wrong, this needs the same poll-and-wait treatment
     // as LinuxAudioCapture (emit 'waiting', retry activation, emit 'live'
     // once it succeeds).
-    output.emit('live');
+    // Deferred: startCapture() has not returned yet, so the caller (see
+    // StreamingManager.startStreaming) hasn't attached its 'live' listener
+    // -- an emit right here would fire on zero listeners and be lost,
+    // leaving the UI stuck on "connecting" forever.
+    process.nextTick(() => output.emit('live'));
 
     return output;
   }

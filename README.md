@@ -124,7 +124,7 @@ aren't present) and `pw-record --target-object <node-id>` (or `parec
 stream's raw PCM. If neither backend is available, the GUI shows a clear
 error instead of crashing or silently capturing nothing.
 
-### Windows -- native helper required, **not yet verified on real hardware**
+### Windows -- native helper required
 
 There is no mature npm package for per-process audio capture on Windows; it
 requires the WASAPI "process loopback" API
@@ -133,17 +133,15 @@ requires the WASAPI "process loopback" API
 native interop and streams raw PCM on stdout; `src/main/audio/windowsCapture.ts`
 spawns it with a fixed path + argv array, same pattern as the Linux path.
 
-**This helper was written from documented Windows SDK struct/interface
-layouts and public sample code, but has not been run on a real Windows
-machine.** Every genuinely uncertain piece of the native interop is marked
-with a `// TODO(windows-verify):` comment in
-`windows-helper/ProcessLoopbackCapture.cs` explaining exactly what to check
-(virtual device path string, PROPVARIANT/activation-params blob layout,
-whether the managed completion-handler callback actually gets invoked by
-native code under .NET 8's default COM interop, real-world `GetMixFormat`
-output vs. the resampling assumptions, and capture latency). Before shipping
-a Windows build, a maintainer with access to real Windows 10/11 hardware
-needs to work through those items.
+The process-loopback capture path has now been run and fixed on real
+Windows hardware (event-driven capture, a PROPVARIANT marshaling bug, and a
+`GetMixFormat` assumption were all corrected as a result -- see
+`windows-helper/ProcessLoopbackCapture.cs`'s class doc comment and git
+history). One piece remains genuinely unverified: activating capture
+against a process that hasn't produced any audio yet, marked with a
+`// TODO(windows-verify):` comment in that same file. Session listing
+(`SessionEnumerator.cs`, the `--list` path) also hasn't been specifically
+re-verified since -- see its own TODO markers.
 
 To build the helper (Windows machine or CI with the .NET 8 SDK, and
 `dotnet` on `PATH`):
